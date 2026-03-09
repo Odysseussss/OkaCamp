@@ -96,6 +96,25 @@ interface HistoryEntry {
   fullResults?: RcaData[];
 }
 
+interface CampaignCategory {
+  provider: string;
+  model: string;
+  saleType: string;
+  nonPositivated: string;
+  quantity: string;
+  prizeValue: string;
+  productCodes: string;
+}
+
+interface Campaign {
+  id: number;
+  type: 'sabadao' | 'bees' | 'custom';
+  saleDate: string;
+  categories: CampaignCategory[];
+  createdAt: string;
+}
+
+
 // Estendendo o objeto window
 declare global {
   interface Window {
@@ -106,7 +125,8 @@ declare global {
 // --- APLICAÇÃO PRINCIPAL ---
 
 export default function App() {
-  const [activeView, setActiveView] = useState<'new' | 'history'>('new');
+  const [activeView, setActiveView] = useState<'new' | 'history' | 'campaigns'>('new');
+
   const [productsData, setProductsData] = useState<Product[]>([]);
   const [salesData, setSalesData] = useState<Sale[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -128,6 +148,18 @@ export default function App() {
   // Configurações de Mecânicas Avançadas
   const [tieredRules, setTieredRules] = useState<TieredRule[]>([]);
   const [comboRules, setComboRules] = useState<ComboRule[]>([]);
+
+  // --- ESTADOS DE CADASTRO DE CAMPANHAS ---
+  const [campaignsHistory, setCampaignsHistory] = useState<Campaign[]>(() => {
+    const saved = localStorage.getItem('campaigns_history');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [editingCampaignId, setEditingCampaignId] = useState<number | null>(null);
+  const [campaignType, setCampaignType] = useState<Campaign['type']>('sabadao');
+  const [campaignSaleDate, setCampaignSaleDate] = useState('');
+  const [campaignCategories, setCampaignCategories] = useState<CampaignCategory[]>([]);
+
 
   // Categorias extraídas dos produtos
   const categories = useMemo(() => {
@@ -375,6 +407,78 @@ export default function App() {
     ) || [];
   }, [results, searchTerm]);
 
+  // --- FUNÇÕES DE CAMPANHAS ---
+  const handleAddCategory = () => {
+    setCampaignCategories([...campaignCategories, {
+      provider: '',
+      model: '',
+      saleType: 'Unidade',
+      nonPositivated: 'Mês',
+      quantity: '',
+      prizeValue: '',
+      productCodes: ''
+    }]);
+  };
+
+  const handleRemoveCategory = (index: number) => {
+    setCampaignCategories(campaignCategories.filter((_, i) => i !== index));
+  };
+
+  const handleCategoryChange = (index: number, field: keyof CampaignCategory, value: string) => {
+    const newCats = [...campaignCategories];
+    newCats[index] = { ...newCats[index], [field]: value };
+    setCampaignCategories(newCats);
+  };
+
+  const handleSaveCampaign = () => {
+    if (!campaignSaleDate) {
+      alert('Por favor, selecione a data de venda.');
+      return;
+    }
+
+    const newCampaign: Campaign = {
+      id: editingCampaignId || Date.now(),
+      type: campaignType,
+      saleDate: campaignSaleDate,
+      categories: campaignCategories,
+      createdAt: new Date().toLocaleString()
+    };
+
+    let updatedHistory: Campaign[];
+    if (editingCampaignId) {
+      updatedHistory = campaignsHistory.map(c => c.id === editingCampaignId ? newCampaign : c);
+      setEditingCampaignId(null);
+    } else {
+      updatedHistory = [newCampaign, ...campaignsHistory];
+    }
+
+    setCampaignsHistory(updatedHistory);
+    localStorage.setItem('campaigns_history', JSON.stringify(updatedHistory));
+
+    // Reset Form
+    setCampaignSaleDate('');
+    setCampaignCategories([]);
+    setCampaignType('sabadao');
+    alert('Campanha salva com sucesso!');
+  };
+
+  const handleEditCampaign = (campaign: Campaign) => {
+    setEditingCampaignId(campaign.id);
+    setCampaignType(campaign.type);
+    setCampaignSaleDate(campaign.saleDate);
+    setCampaignCategories(campaign.categories);
+    // Role para o topo do formulário ou mude o estado conforme necessário
+  };
+
+  const handleDeleteCampaign = (id: number) => {
+    if (confirm('Tem certeza que deseja excluir esta campanha?')) {
+      const updated = campaignsHistory.filter(c => c.id !== id);
+      setCampaignsHistory(updated);
+      localStorage.setItem('campaigns_history', JSON.stringify(updated));
+    }
+  };
+
+
   // Sidebar Item Component
   const SidebarItem = ({ icon: Icon, label, active, onClick }: { icon: any, label: string, active: boolean, onClick: () => void }) => (
     <button
@@ -399,7 +503,7 @@ export default function App() {
           </div>
           <div>
             <h1 className="text-xl font-black text-slate-800 tracking-tighter leading-none">APR <span className="text-indigo-600">PORTAL</span></h1>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">v0.2 OkajimaBI</p>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">v0.4 OkajimaBI</p>
           </div>
         </div>
 
@@ -417,6 +521,13 @@ export default function App() {
             active={activeView === 'history'}
             onClick={() => setActiveView('history')}
           />
+          <SidebarItem
+            icon={PlusCircle}
+            label="Cadastrar Campanha"
+            active={activeView === 'campaigns'}
+            onClick={() => setActiveView('campaigns')}
+          />
+
         </nav>
 
         <div className="mt-auto p-5 bg-gradient-to-br from-slate-50 to-white rounded-3xl border border-slate-100 shadow-sm">
@@ -426,7 +537,7 @@ export default function App() {
             </div>
             <div className="overflow-hidden">
               <p className="text-xs font-black text-slate-800 truncate">Lilicos</p>
-              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">Analista Responsável</p>
+              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">Versão de teste</p>
             </div>
           </div>
         </div>
@@ -498,13 +609,13 @@ export default function App() {
                     <h3 className="text-xl font-black text-white tracking-tight">Parametros da Campanha</h3>
                   </div>
                   <div className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] bg-white/5 px-4 py-2 rounded-full border border-white/5">
-                    Motor v2.1
+                    Motor v4.0
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pb-4">
                   <div className="space-y-3">
-                    <label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em]">Data Venda (Corte de Positivação)</label>
+                    <label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em]">Data Venda</label>
                     <input
                       type="date"
                       value={targetDate}
@@ -639,7 +750,7 @@ export default function App() {
                         </div>
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                           <div className="lg:col-span-2 space-y-3">
-                            <label className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Códigos dos SKUs (Ex: CC01, CC02, 3456...)</label>
+                            <label className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Códigos dos SKUs</label>
                             <input
                               type="text"
                               placeholder="Liste os códigos separados por vírgula para formar o combo"
@@ -863,7 +974,7 @@ export default function App() {
               )}
             </div>
           </div>
-        ) : (
+        ) : activeView === 'history' ? (
           /* TELA DE HISTÓRICO PREMIUM */
           <div className="p-12 space-y-12 animate-in fade-in slide-in-from-left duration-700">
             <header className="flex justify-between items-end bg-white p-12 rounded-[56px] border border-slate-100 shadow-xl shadow-slate-100/50">
@@ -883,7 +994,7 @@ export default function App() {
             {history.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-40 bg-zinc-50 rounded-[60px] border-2 border-dashed border-zinc-200">
                 <div className="p-10 bg-white rounded-full shadow-2xl shadow-indigo-100/50 mb-10">
-                  <History size={100} className="text-indigo-100" />
+                  <History size={100} className="text-zinc-200" />
                 </div>
                 <h3 className="text-3xl font-black text-zinc-400 tracking-tighter">Sem registros.</h3>
                 <button
@@ -924,7 +1035,7 @@ export default function App() {
                           <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Equipe</p>
                           <p className="text-lg font-black text-slate-800 tabular-nums">{entry.rcas}</p>
                         </div>
-                        <div className="bg-slate-50 p-4 rounded-3xl group-hover:bg-indigo-50 transition-colors">
+                        <div className="bg-zinc-50 p-4 rounded-3xl group-hover:bg-indigo-50 transition-colors">
                           <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Clientes Premiados</p>
                           <p className="text-lg font-black text-slate-800 tabular-nums">{entry.totals.premiados}</p>
                         </div>
@@ -949,6 +1060,252 @@ export default function App() {
                 ))}
               </div>
             )}
+          </div>
+        ) : (
+          /* TELA DE CADASTRO DE CAMPANHAS */
+          <div className="p-8 lg:p-12 space-y-12 animate-in fade-in zoom-in duration-700 pb-32">
+            <header className="flex flex-col lg:flex-row justify-between items-start lg:items-end bg-white p-10 lg:p-12 rounded-[56px] border border-slate-100 shadow-xl shadow-slate-100/50 gap-6">
+              <div>
+                <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.4em] mb-4">Gestão de Marketing</p>
+                <h2 className="text-4xl lg:text-5xl font-black text-slate-800 tracking-tighter">CADASTRO DE <span className="text-indigo-600">CAMPANHAS</span></h2>
+                <p className="text-slate-400 font-medium text-base lg:text-lg mt-4 max-w-lg">Configure os parâmetros das campanhas promocionais e acompanhe o histórico.</p>
+              </div>
+              <div className="flex gap-4 bg-slate-50 p-6 rounded-[32px] border border-slate-100">
+                <div className="text-right">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Campanhas Ativas</p>
+                  <p className="text-3xl font-black text-slate-800">{campaignsHistory.length}</p>
+                </div>
+              </div>
+            </header>
+
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-12">
+              {/* FORMULÁRIO DE CADASTRO */}
+              <div className="xl:col-span-2 space-y-8">
+                <section className="bg-white p-10 lg:p-12 rounded-[56px] shadow-2xl shadow-slate-200/50 border border-slate-100 space-y-10">
+                  <div className="flex items-center gap-4 border-b border-slate-50 pb-8">
+                    <div className="p-4 bg-indigo-600 rounded-[24px] text-white shadow-lg shadow-indigo-100">
+                      <PlusCircle size={28} />
+                    </div>
+                    <h3 className="text-2xl font-black text-slate-800 tracking-tight">{editingCampaignId ? 'Editar Campanha' : 'Configurar Nova Campanha'}</h3>
+                  </div>
+
+                  {/* Seleção de Tipo */}
+                  <div className="space-y-4">
+                    <label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] px-2">Tipo de Campanha</label>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {(['sabadao', 'bees', 'custom'] as const).map((type) => (
+                        <button
+                          key={type}
+                          onClick={() => setCampaignType(type)}
+                          className={`py-5 px-6 rounded-3xl font-black text-xs uppercase tracking-widest transition-all duration-500 border-2 ${campaignType === type ? 'bg-indigo-600 text-white border-indigo-600 shadow-xl shadow-indigo-100 scale-[1.05]' : 'bg-white text-slate-400 border-slate-100 hover:border-indigo-200'}`}
+                        >
+                          {type === 'sabadao' ? 'Sabadão de Vendas' : type === 'bees' ? 'Dia Bees' : 'Personalizada'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-3">
+                      <label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] px-2">Data de Venda</label>
+                      <input
+                        type="date"
+                        value={campaignSaleDate}
+                        onChange={(e) => setCampaignSaleDate(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black outline-none focus:border-indigo-500 transition-all placeholder:text-slate-300"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                      <label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] px-2">Categorias e Regras</label>
+                      <button
+                        onClick={handleAddCategory}
+                        className="flex items-center gap-2 px-6 py-3 bg-emerald-50 text-emerald-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
+                      >
+                        <PlusCircle size={16} /> Adicionar Categoria
+                      </button>
+                    </div>
+
+                    <div className="space-y-6">
+                      {campaignCategories.length === 0 ? (
+                        <div className="py-12 bg-slate-50 rounded-[40px] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-300">
+                          <Layers size={48} className="mb-4 opacity-20" />
+                          <p className="font-bold text-sm">Nenhuma categoria adicionada</p>
+                        </div>
+                      ) : (
+                        campaignCategories.map((cat, idx) => (
+                          <div key={idx} className="bg-slate-50 p-8 rounded-[40px] border border-slate-100 space-y-8 animate-in slide-in-from-bottom-4 duration-500 group">
+                            <div className="flex justify-between items-center border-b border-slate-200 pb-6">
+                              <span className="text-xs font-black text-indigo-400 uppercase tracking-widest">Configuração #{idx + 1}</span>
+                              <button
+                                onClick={() => handleRemoveCategory(idx)}
+                                className="p-3 bg-red-50 text-red-400 rounded-xl hover:bg-red-500 hover:text-white transition-all"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                              <div className="space-y-2">
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Fornecedor</label>
+                                <select
+                                  value={cat.provider}
+                                  onChange={(e) => handleCategoryChange(idx, 'provider', e.target.value)}
+                                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-indigo-500"
+                                >
+                                  <option value="">Selecionar...</option>
+                                  <option value="Coty">Coty</option>
+                                  <option value="Hypera">Hypera</option>
+                                  <option value="Kenvue">Kenvue</option>
+                                </select>
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Modelo</label>
+                                <select
+                                  value={cat.model}
+                                  onChange={(e) => handleCategoryChange(idx, 'model', e.target.value)}
+                                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-indigo-500"
+                                >
+                                  <option value="">Selecionar...</option>
+                                  <option value="CGI1">CGI1</option>
+                                  <option value="CGI2">CGI2</option>
+                                  <option value="BU CGI">BU CGI</option>
+                                </select>
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Tipo Venda</label>
+                                <select
+                                  value={cat.saleType}
+                                  onChange={(e) => handleCategoryChange(idx, 'saleType', e.target.value)}
+                                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-indigo-500"
+                                >
+                                  <option value="Unidade">Unidade</option>
+                                  <option value="Caixa">Caixa</option>
+                                  <option value="Valor">Valor</option>
+                                </select>
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Não Positivado</label>
+                                <select
+                                  value={cat.nonPositivated}
+                                  onChange={(e) => handleCategoryChange(idx, 'nonPositivated', e.target.value)}
+                                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-indigo-500"
+                                >
+                                  <option value="Mês">Mês</option>
+                                  <option value="Bimestre">Bimestre</option>
+                                  <option value="Trimestre">Trimestre</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                              <div className="space-y-2">
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Quantidade</label>
+                                <input
+                                  type="text"
+                                  value={cat.quantity}
+                                  onChange={(e) => handleCategoryChange(idx, 'quantity', e.target.value)}
+                                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-indigo-500"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Premiação (R$)</label>
+                                <input
+                                  type="text"
+                                  value={cat.prizeValue}
+                                  onChange={(e) => handleCategoryChange(idx, 'prizeValue', e.target.value)}
+                                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-indigo-500"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Cod. Produtos</label>
+                                <input
+                                  type="text"
+                                  placeholder="Separados por vírgula"
+                                  value={cat.productCodes}
+                                  onChange={(e) => handleCategoryChange(idx, 'productCodes', e.target.value)}
+                                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-indigo-500"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4 pt-10 border-t border-slate-50">
+                    <button
+                      onClick={handleSaveCampaign}
+                      className="flex-grow py-5 bg-indigo-600 text-white rounded-[24px] font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-indigo-200 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3"
+                    >
+                      <Save size={20} /> {editingCampaignId ? 'Atualizar Campanha' : 'Salvar Campanha'}
+                    </button>
+                    {editingCampaignId && (
+                      <button
+                        onClick={() => {
+                          setEditingCampaignId(null);
+                          setCampaignSaleDate('');
+                          setCampaignCategories([]);
+                        }}
+                        className="px-8 py-5 bg-slate-100 text-slate-400 rounded-[24px] font-black text-xs uppercase tracking-widest transition-all"
+                      >
+                        Cancelar
+                      </button>
+                    )}
+                  </div>
+                </section>
+              </div>
+
+              {/* HISTÓRICO LADO DIREITO */}
+              <div className="space-y-8">
+                <section className="bg-slate-900 p-10 rounded-[56px] shadow-2xl shadow-indigo-100 text-white min-h-[600px] flex flex-col">
+                  <div className="flex items-center gap-4 mb-10">
+                    <History size={24} className="text-indigo-400" />
+                    <h3 className="text-xl font-black tracking-tight">Histórico de Cadastros</h3>
+                  </div>
+
+                  <div className="space-y-6 flex-grow overflow-y-auto max-h-[800px] pr-2 custom-scrollbar">
+                    {campaignsHistory.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-20 opacity-30">
+                        <Package size={64} className="mb-6" />
+                        <p className="font-bold text-xs uppercase tracking-widest text-center">Nenhuma campanha registrada ainda</p>
+                      </div>
+                    ) : (
+                      campaignsHistory.map((camp) => (
+                        <div key={camp.id} className="bg-white/5 border border-white/5 rounded-[32px] p-6 space-y-4 hover:bg-white/10 transition-all group">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <span className="px-3 py-1 bg-indigo-500/20 text-indigo-400 text-[8px] font-black uppercase rounded-full tracking-tighter">
+                                {camp.type === 'sabadao' ? 'Sabadão' : camp.type === 'bees' ? 'Dia Bees' : 'Custom'}
+                              </span>
+                              <h4 className="text-sm font-black mt-2">{new Date(camp.saleDate).toLocaleDateString('pt-BR')}</h4>
+                              <p className="text-[10px] text-slate-500 mt-1 font-bold">{camp.categories.length} Categorias</p>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleEditCampaign(camp)}
+                                className="p-2 bg-white/5 text-indigo-400 rounded-lg hover:bg-indigo-600 hover:text-white transition-all"
+                              >
+                                <Settings2 size={16} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteCampaign(camp.id)}
+                                className="p-2 bg-white/5 text-red-400 rounded-lg hover:bg-red-500 hover:text-white transition-all"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </section>
+              </div>
+            </div>
           </div>
         )}
       </main>
