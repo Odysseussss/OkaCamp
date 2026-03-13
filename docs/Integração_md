@@ -1,0 +1,52 @@
+# 🏗️ Especificação de Integração: OkaCamp
+O projeto OkaCamp utiliza uma arquitetura híbrida para otimizar custos e performance. O desenvolvimento no Antigravity deve considerar dois contextos de conexão distintos:
+
+1. Persistência de Dados (Supabase / PostgreSQL)
+As tabelas de configuração das campanhas residem no Supabase. Esta é a única camada de escrita (INSERT/UPDATE/DELETE) da aplicação.
+
+Estrutura de Tabelas:
+
+campanha_header: Dados mestres da campanha (Nome, Período, Periodicidade).
+
+campanha_modelo_rca: Segmentação por modelo (campo: modelocampanha).
+
+campanha_regra_condicao: Definição de métricas (Unidade, Caixa, Valor) e prêmios.
+
+campanha_filtro_escopo: Filtros técnicos alinhados ao Datalake (codigoproduto, marca, categoriacampanha).
+
+Ação no Antigravity: Configurar a DATABASE_URL para o Postgres do Supabase. O CRUD das campanhas deve interagir exclusivamente com este banco.
+
+2. Consumo Analítico (Fabric SQL Endpoint)
+Os dados de suporte (Vendas, Clientes, Produtos e Vendedores) não devem ser replicados no Supabase. O portal deve consumi-los em tempo real via Fabric SQL Endpoint.
+
+Conexão via Driver TDS (SQL Server):
+
+Finalidade: Popular campos de seleção (dropdowns) e exibir previews de apuração.
+
+Exemplos de Consultas:
+
+Listar modelos de RCA para seleção: SELECT DISTINCT modelocampanha FROM rca.
+
+Buscar produtos para o filtro de escopo: SELECT codigoproduto, produto FROM produtos.
+
+Validar clientes ativos: SELECT codigocliente, cliente FROM clientes.
+
+Ação no Antigravity: Criar um "Read-only Provider" apontando para a Connection String do Fabric. O Node.js usará estes dados apenas para leitura, garantindo que o portal utilize a "Fonte da Verdade" oficial da Okajima.
+
+3. Lógica de Apuração (Cross-Source)
+O grande diferencial desta estrutura é o alinhamento de nomes. Para que o Power BI consiga realizar o Join automático entre o Supabase e o Azure/Fabric, o Antigravity deve garantir a integridade dos campos:
+
+Chave de RCA: Deve ser salva exatamente como modelocampanha (ex: "CGI1").
+
+Chave de Produto: Deve ser salva como codigoproduto (BigInt).
+
+Periodicidade: Deve seguir os padrões esperados pela View de apuração (Mensal, Bimestral, Trimestral).
+
+📊 Benefícios para o Desenvolvimento
+Independência: O app não depende de processos de engenharia de dados (ETL) para gravar regras.
+
+Baixo Custo: O tráfego de escrita não onera a licença F2 do Fabric, pois fica isolado no Supabase.
+
+Consistência: O portal sempre exibirá os produtos e clientes atualizados, pois lê diretamente do Lakehouse via Shortcut do Azure.
+
+Dica para o Antigravity: Recomendo utilizar o Prisma ORM para as tabelas do Supabase e o driver mssql ou tedious para as consultas ao Fabric SQL Endpoint.
